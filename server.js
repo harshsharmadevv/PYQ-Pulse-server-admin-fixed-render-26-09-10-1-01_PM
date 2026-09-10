@@ -18,9 +18,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL || '';
 // IMPORTANT: Do NOT use the Supabase anon/publishable key here.
 // Render should provide SUPABASE_SECRET_KEY (preferred) or the legacy
 // SUPABASE_SERVICE_ROLE_KEY. These keys must stay server-side only.
-const SUPABASE_ADMIN_KEY =
-  process.env.SUPABASE_SECRET_KEY ||
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+const SUPABASE_ADMIN_KEY = "sb_secret_BmXcCYPd12uUbxIZMWkT4Q_CfN-hkmq"
   '';
 
 if (!SUPABASE_URL || !SUPABASE_ADMIN_KEY) {

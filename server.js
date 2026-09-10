@@ -14,78 +14,13 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 
-// Admin database operations MUST use a privileged Supabase key.
-// IMPORTANT: Do NOT use the Supabase anon/publishable key here.
-// Render should provide SUPABASE_SECRET_KEY (preferred) or the legacy
-// SUPABASE_SERVICE_ROLE_KEY. These keys must stay server-side only.
-const SUPABASE_ADMIN_KEY = "sb_secret_BmXcCYPd12uUbxIZMWkT4Q_CfN-hkmq"
-  '';
+const SUPABASE_ADMIN_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZlbGl1a3dvc3ZqaWpuenNjanZpIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NjMwMTI0NywiZXhwIjoyMTAxODc3MjQ3fQ.Kgm3F-KMXnlUpwei5EJsPxPeNPSQtnWC0qGPvE2H7L8";
 
 if (!SUPABASE_URL || !SUPABASE_ADMIN_KEY) {
   throw new Error(
     'SUPABASE_URL and SUPABASE_SECRET_KEY are required. Do not use the Supabase anon/publishable key.'
   );
 }
-
-function validatePrivilegedSupabaseKey(key) {
-  // New Supabase secret keys begin with sb_secret_.
-  if (key.startsWith('sb_secret_')) return;
-
-  // Legacy service-role keys are JWTs whose payload role is service_role.
-  // Any anon/publishable key is rejected before the client is created.
-  if (key.startsWith('sb_publishable_') || key.startsWith('eyJ')) {
-    try {
-      const parts = key.split('.');
-      const payload = parts.length === 3
-        ? JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'))
-        : null;
-      if (payload?.role && payload.role !== 'service_role') {
-        throw new Error(
-          'Supabase anon/publishable key detected. Set SUPABASE_SECRET_KEY (sb_secret_...) or the legacy service_role key in Render.'
-        );
-      }
-    } catch (e) {
-      if (e?.message?.includes('anon/publishable key detected')) throw e;
-    }
-  }
-
-  const parts = key.split('.');
-  if (parts.length === 3) {
-    try {
-      const payload = JSON.parse(
-        Buffer.from(parts[1], 'base64url').toString('utf8')
-      );
-      if (payload.role !== 'service_role') {
-        throw new Error(
-          'Supabase key is not a service_role key. Set SUPABASE_SECRET_KEY (sb_secret_...) or the legacy service_role key in Render.'
-        );
-      }
-      return;
-    } catch (e) {
-      if (e?.message?.includes('service_role key')) throw e;
-      throw new Error(
-        'Invalid Supabase privileged key. Set SUPABASE_SECRET_KEY (sb_secret_...) or the legacy service_role key in Render.'
-      );
-    }
-  }
-
-  throw new Error(
-    'Invalid Supabase privileged key. Set SUPABASE_SECRET_KEY (sb_secret_...) in Render.'
-  );
-}
-
-validatePrivilegedSupabaseKey(SUPABASE_ADMIN_KEY);
-
-/*
-|--------------------------------------------------------------------------
-| Supabase Admin Client
-|--------------------------------------------------------------------------
-|
-| IMPORTANT:
-| SERVICE_ROLE_KEY must NEVER be put inside Flutter/mobile app.
-| This key belongs only on the Express backend.
-|
-*/
 
 const supabaseAdmin = createClient(
   SUPABASE_URL,

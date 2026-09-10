@@ -100,6 +100,20 @@ let mediaBucketReady = null;
 */
 
 app.disable('x-powered-by');
+app.disable('etag');
+
+// Admin data must always be fetched fresh. This also prevents stale 304
+// responses from making the admin panel display an older exam name.
+app.use('/api/admin', (req, res, next) => {
+  res.setHeader(
+    'Cache-Control',
+    'no-store, no-cache, must-revalidate, proxy-revalidate'
+  );
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  next();
+});
 
 app.use(helmet());
 
@@ -2894,28 +2908,58 @@ app.patch('/api/admin/exams/:id', adminAuth, async (req, res) => {
 
     update.updated_at = now();
 
-    const { error: updateError } = await supabaseAdmin
+    // Ask Supabase to return the row actually affected by the UPDATE.
+    // This prevents a silent 200 when the UPDATE matched zero rows and also
+    // lets us verify that the database stored the requested name.
+    const { data: updatedExam, error: updateError } = await supabaseAdmin
       .from('exams')
       .update(update)
-      .eq('id', resolvedExamId);
-
-    if (updateError) throw updateError;
-
-    const { data: updatedExam, error: reloadError } = await supabaseAdmin
-      .from('exams')
-      .select('*')
       .eq('id', resolvedExamId)
+      .select('*')
       .limit(1)
       .maybeSingle();
 
-    if (reloadError) throw reloadError;
+    if (updateError) throw updateError;
+
     if (!updatedExam) {
+      console.error('[ADMIN EXAM UPDATE NO ROW]', {
+        requestedExamId: examId,
+        resolvedExamId,
+        update,
+      });
       return error(
         res,
         404,
-        `Exam was not found after update: ${resolvedExamId}`,
-        'exam_not_found_after_update'
+        `Exam update matched no database row: ${resolvedExamId}`,
+        'exam_update_no_row'
       );
+    }
+
+    if (
+      update.name !== undefined &&
+      String(updatedExam.name ?? '') !== String(update.name)
+    ) {
+      console.error('[ADMIN EXAM UPDATE VERIFY FAILED]', {
+        requestedExamId: examId,
+        resolvedExamId,
+        requestedName: update.name,
+        storedName: updatedExam.name,
+      });
+      return error(
+        res,
+        500,
+        `Database did not retain the requested exam name. Requested: ${update.name}; stored: ${updatedExam.name ?? ''}`,
+        'exam_update_verification_failed'
+      );
+    }
+
+    if (process.env.ADMIN_DEBUG_LOGS === 'true') {
+      console.log('[ADMIN EXAM UPDATED]', {
+        requestedExamId: examId,
+        resolvedExamId,
+        update,
+        updatedName: updatedExam?.name,
+      });
     }
 
     return response(res, { exam: mapExam(updatedExam) });

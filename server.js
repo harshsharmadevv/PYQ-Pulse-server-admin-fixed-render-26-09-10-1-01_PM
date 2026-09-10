@@ -15,30 +15,40 @@ const HOST = process.env.HOST || '0.0.0.0';
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 
 // Admin database operations MUST use a privileged Supabase key.
-// Prefer the newer secret key when available, otherwise use the legacy
-// service-role key. Never put either key in the admin-panel frontend.
+// IMPORTANT: Do NOT use the Supabase anon/publishable key here.
+// Render should provide SUPABASE_SECRET_KEY (preferred) or the legacy
+// SUPABASE_SERVICE_ROLE_KEY. These keys must stay server-side only.
 const SUPABASE_ADMIN_KEY =
   process.env.SUPABASE_SECRET_KEY ||
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_ADMIN_KEY ||
   '';
 
 if (!SUPABASE_URL || !SUPABASE_ADMIN_KEY) {
   throw new Error(
-    'SUPABASE_URL and SUPABASE_SECRET_KEY (or SUPABASE_SERVICE_ROLE_KEY) are required.'
+    'SUPABASE_URL and SUPABASE_SECRET_KEY are required. Do not use the Supabase anon/publishable key.'
   );
 }
 
 function validatePrivilegedSupabaseKey(key) {
-  // New Supabase secret keys are intentionally opaque and begin with sb_secret_.
+  // New Supabase secret keys begin with sb_secret_.
   if (key.startsWith('sb_secret_')) return;
 
   // Legacy service-role keys are JWTs whose payload role is service_role.
-  // Reject anon/publishable JWTs early; those keys are subject to RLS.
-  if (key.startsWith('sb_publishable_')) {
-    throw new Error(
-      'SUPABASE_ADMIN_KEY is a publishable key. Use the Supabase Secret key (sb_secret_...) or legacy service_role key instead.'
-    );
+  // Any anon/publishable key is rejected before the client is created.
+  if (key.startsWith('sb_publishable_') || key.startsWith('eyJ')) {
+    try {
+      const parts = key.split('.');
+      const payload = parts.length === 3
+        ? JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'))
+        : null;
+      if (payload?.role && payload.role !== 'service_role') {
+        throw new Error(
+          'Supabase anon/publishable key detected. Set SUPABASE_SECRET_KEY (sb_secret_...) or the legacy service_role key in Render.'
+        );
+      }
+    } catch (e) {
+      if (e?.message?.includes('anon/publishable key detected')) throw e;
+    }
   }
 
   const parts = key.split('.');
@@ -49,20 +59,20 @@ function validatePrivilegedSupabaseKey(key) {
       );
       if (payload.role !== 'service_role') {
         throw new Error(
-          'SUPABASE_ADMIN_KEY is not a service_role JWT. Replace it with the Supabase service_role key.'
+          'Supabase key is not a service_role key. Set SUPABASE_SECRET_KEY (sb_secret_...) or the legacy service_role key in Render.'
         );
       }
       return;
     } catch (e) {
-      if (e?.message?.includes('service_role JWT')) throw e;
+      if (e?.message?.includes('service_role key')) throw e;
       throw new Error(
-        'SUPABASE_ADMIN_KEY is not a valid Supabase Secret/service_role key.'
+        'Invalid Supabase privileged key. Set SUPABASE_SECRET_KEY (sb_secret_...) or the legacy service_role key in Render.'
       );
     }
   }
 
   throw new Error(
-    'SUPABASE_ADMIN_KEY is not a recognized privileged Supabase key. Use sb_secret_... or the legacy service_role key.'
+    'Invalid Supabase privileged key. Set SUPABASE_SECRET_KEY (sb_secret_...) in Render.'
   );
 }
 
